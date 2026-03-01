@@ -110,9 +110,7 @@ func (p *Partition) MoveNode(nodeID, destComm int) {
 func (p *Partition) AddSingletonCommunity(nodeID int) int {
 	commID := p.nextCommID
 	p.nextCommID++
-	p.communityNodes[commID] = []int{nodeID}
-	p.communityDegree[commID] = p.g.Degree(nodeID)
-	p.communityInternal[commID] = p.g.WeightBetween(nodeID, nodeID)
+	p.MoveNode(nodeID, commID)
 	return commID
 }
 
