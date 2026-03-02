@@ -51,16 +51,20 @@ func aggregateGraph(g *graph.Graph, refined *graph.Partition) aggregateResult {
 			newTgt := commToNewNode[tgtComm]
 
 			if newSrc == newTgt {
-				// Internal (self-loop on the super-node).
-				// Each undirected internal edge appears twice (once per endpoint),
-				// so we halve here to avoid double-counting.
-				accumulated[edgeKey{newSrc, newSrc}] += w / 2.0
+				// Internal to the super-node.
+				if nodeID == neighbor {
+					// Original self-loop: only appears once in g.Neighbors(nodeID).
+					accumulated[edgeKey{newSrc, newSrc}] += w
+				} else {
+					// Internal edge between distinct nodes: appears twice (once per endpoint).
+					accumulated[edgeKey{newSrc, newSrc}] += w / 2.0
+				}
 			} else {
 				lo, hi := newSrc, newTgt
 				if lo > hi {
 					lo, hi = hi, lo
 				}
-				// Each undirected cross-edge appears twice; halve.
+				// Cross-community edge: appears twice; halve.
 				accumulated[edgeKey{lo, hi}] += w / 2.0
 			}
 		}

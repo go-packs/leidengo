@@ -50,6 +50,49 @@ func TestTwoCliquesRecovery(t *testing.T) {
 	}
 }
 
+func TestTwoCliques_SmallBridge(t *testing.T) {
+	// 4-node clique
+	g := graph.New(4)
+	for i := 0; i < 4; i++ {
+		for j := i + 1; j < 4; j++ {
+			_ = g.AddEdge(i, j, 1.0)
+		}
+	}
+
+	// Resolution 0: should definitely merge all into 1 community
+	lowRes := Run(g, Options{QualityFunc: quality.NewModularity(0.0), RandomSeed: 42})
+	if lowRes.Partition.NumCommunities() != 1 {
+		t.Errorf("expected 1 community at resolution 0, got %d", lowRes.Partition.NumCommunities())
+	}
+
+	// Extremely high resolution: should keep them as singletons
+	highRes := Run(g, Options{QualityFunc: quality.NewModularity(100.0), RandomSeed: 42})
+	if highRes.Partition.NumCommunities() < 4 {
+		t.Errorf("expected 4 communities at high resolution, got %d", highRes.Partition.NumCommunities())
+	}
+}
+
+func TestRunN_BetterQuality(t *testing.T) {
+	g := graph.New(10)
+	// Create a random-ish graph where different seeds might matter
+	for i := 0; i < 10; i++ {
+		_ = g.AddEdge(i, (i+1)%10, 1.0)
+		_ = g.AddEdge(i, (i+2)%10, 0.5)
+	}
+
+	qf := quality.NewModularity(1.0)
+	
+	// Run once
+	r1 := Run(g, Options{QualityFunc: qf, RandomSeed: 1})
+	
+	// Run N times
+	rN := RunN(g, qf, 20, 42)
+	
+	if rN.Quality < r1.Quality {
+		t.Errorf("RunN should find a result at least as good as a single run: %f vs %f", rN.Quality, r1.Quality)
+	}
+}
+
 // TestSingleNodeGraph handles a trivial edge case.
 func TestSingleNodeGraph(t *testing.T) {
 	g := graph.New(1)
@@ -190,6 +233,38 @@ func TestCPMQualityFunction(t *testing.T) {
 	}
 }
 
+func TestOptions_InitialPartition(t *testing.T) {
+	g := graph.New(6)
+	for i := 0; i < 3; i++ {
+		for j := i + 1; j < 3; j++ {
+			_ = g.AddEdge(i, j, 1.0)
+		}
+	}
+	for i := 3; i < 6; i++ {
+		for j := i + 1; j < 6; j++ {
+			_ = g.AddEdge(i, j, 1.0)
+		}
+	}
+	
+	// Start with a "perfect" partition
+	initP := graph.NewSingletonPartition(g)
+	c0 := initP.CommunityOf(0)
+	initP.MoveNode(1, c0)
+	initP.MoveNode(2, c0)
+	c3 := initP.CommunityOf(3)
+	initP.MoveNode(4, c3)
+	initP.MoveNode(5, c3)
+
+	opts := DefaultOptions()
+	opts.InitialPartition = initP
+	
+	result := Run(g, opts)
+	// Should stay at 2 communities
+	if result.Partition.NumCommunities() != 2 {
+		t.Errorf("expected 2 communities from perfect start, got %d", result.Partition.NumCommunities())
+	}
+}
+
 func TestOptions_NumIterations(t *testing.T) {
 	g := graph.New(10)
 	for i := 0; i < 10; i++ {
@@ -204,6 +279,40 @@ func TestOptions_NumIterations(t *testing.T) {
 	result := Run(g, opts)
 	if len(result.FlatCommunities) != 10 {
 		t.Errorf("expected 10 nodes, got %d", len(result.FlatCommunities))
+	}
+}
+
+func TestBuildAggPartition(t *testing.T) {
+	g := graph.New(4)
+	_ = g.AddEdge(0, 1, 1.0)
+	_ = g.AddEdge(2, 3, 1.0)
+
+	// Coarse: {0,1}, {2,3}
+	coarse := graph.NewSingletonPartition(g)
+	coarse.MoveNode(1, coarse.CommunityOf(0))
+	coarse.MoveNode(3, coarse.CommunityOf(2))
+
+	// Refined: {0}, {1}, {2}, {3} (all singletons)
+	refined := graph.NewSingletonPartition(g)
+	
+	// commToNewNode maps refined comms to super-nodes: 0->0, 1->1, 2->2, 3->3
+	commToNewNode := map[int]int{0: 0, 1: 1, 2: 2, 3: 3}
+	aggRes := aggregateResult{
+		aggregated:    graph.New(4),
+		nodeToComm:    refined.NodeCommunity,
+		commToNewNode: commToNewNode,
+	}
+
+	// Build partition on aggregated graph
+	aggP := buildAggPartition(aggRes, coarse)
+	
+	// super-node 0 and 1 represent orig 0 and 1, which were in same coarse community
+	if aggP.CommunityOf(0) != aggP.CommunityOf(1) {
+		t.Error("super-nodes 0 and 1 should be in the same community")
+	}
+	// super-nodes 2 and 3 represent orig 2 and 3, which were in same coarse community
+	if aggP.CommunityOf(2) != aggP.CommunityOf(3) {
+		t.Error("super-nodes 2 and 3 should be in the same community")
 	}
 }
 
