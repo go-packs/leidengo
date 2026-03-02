@@ -84,10 +84,11 @@ func refineSubset(
 		}
 
 		// Filter by well-connectedness condition and positive delta Q.
+		gamma := qf.Resolution()
 		var candidates []communityCandidate
 		for nc, wToComm := range neighborComms {
-			ncSize := float64(len(refined.NodesInCommunity(nc)))
-			if wToComm < theta*ki*ncSize {
+			wc := refined.CommunityWeight(nc)
+			if wToComm < gamma*ki*wc {
 				continue // would create a poorly connected community
 			}
 			delta := qf.DeltaQuality(g, refined, nodeID, nc)

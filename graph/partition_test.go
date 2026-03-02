@@ -58,6 +58,24 @@ func TestPartition_UniqueCommunities(t *testing.T) {
 	}
 }
 
+func TestPartition_CommunityWeight(t *testing.T) {
+	g := New(3)
+	g.SetNodeWeight(0, 10.0)
+	g.SetNodeWeight(1, 20.0)
+	g.SetNodeWeight(2, 30.0)
+
+	p := NewSingletonPartition(g)
+	if p.CommunityWeight(p.CommunityOf(0)) != 10.0 {
+		t.Errorf("expected weight 10.0, got %f", p.CommunityWeight(p.CommunityOf(0)))
+	}
+
+	// Merge 1 into 0
+	p.MoveNode(1, p.CommunityOf(0))
+	if p.CommunityWeight(p.CommunityOf(0)) != 30.0 {
+		t.Errorf("expected weight 30.0 after merge, got %f", p.CommunityWeight(p.CommunityOf(0)))
+	}
+}
+
 func TestPartition_Copy(t *testing.T) {
 	g := New(3)
 	_ = g.AddEdge(0, 1, 1.0)
@@ -72,6 +90,14 @@ func TestPartition_Copy(t *testing.T) {
 	
 	if !reflect.DeepEqual(p2.NodeCommunity, p.NodeCommunity) {
 		t.Error("copy NodeCommunity mismatch")
+	}
+
+	if !reflect.DeepEqual(p2.nodePosition, p.nodePosition) {
+		t.Error("copy nodePosition mismatch")
+	}
+
+	if !reflect.DeepEqual(p2.communityWeight, p.communityWeight) {
+		t.Error("copy communityWeight mismatch")
 	}
 	
 	// Modify original, copy should remain unchanged
