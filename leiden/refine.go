@@ -59,39 +59,47 @@ func refineSubset(
 	qf quality.QualityFunction,
 	rng *rand.Rand,
 ) {
-	subsetSet := subsetMap(subset)
+	subsetM := subsetMap(subset)
 	shuffled := utils.ShuffleInts(subset, rng)
 
 	for _, nodeID := range shuffled {
 		// Only merge nodes that are still singletons in the refined partition.
-		if len(refined.NodesInCommunity(refined.CommunityOf(nodeID))) > 1 {
+		currentComm := refined.CommunityOf(nodeID)
+		if len(refined.NodesInCommunity(currentComm)) > 1 {
 			continue
 		}
 
 		ki := g.Degree(nodeID)
 
 		// Aggregate edge weight to each neighbouring refined community (within subset).
-		neighborComms := make(map[int]float64)
-		for neighbor, w := range g.Neighbors(nodeID) {
-			if !subsetSet[neighbor] {
-				continue
-			}
-			nc := refined.CommunityOf(neighbor)
-			if nc == refined.CommunityOf(nodeID) {
-				continue
-			}
-			neighborComms[nc] += w
-		}
+		neighborWeights := refined.NeighborCommunityWeights(nodeID)
+		kiInSrc := neighborWeights[currentComm]
 
 		// Filter by well-connectedness condition and positive delta Q.
 		gamma := qf.Resolution()
 		var candidates []communityCandidate
-		for nc, wToComm := range neighborComms {
+		for nc, wToComm := range neighborWeights {
+			if nc == currentComm {
+				continue
+			}
+			
+			// Must be within the same coarse community
+			inSubset := false
+			for neighbor := range g.Neighbors(nodeID) {
+				if refined.NodeCommunity[neighbor] == nc && subsetM[neighbor] {
+					inSubset = true
+					break
+				}
+			}
+			if !inSubset {
+				continue
+			}
+
 			wc := refined.CommunityWeight(nc)
 			if wToComm < gamma*ki*wc {
 				continue // would create a poorly connected community
 			}
-			delta := qf.DeltaQuality(g, refined, nodeID, nc)
+			delta := qf.DeltaQuality(g, refined, nodeID, currentComm, nc, kiInSrc, wToComm)
 			if delta >= 0 {
 				candidates = append(candidates, communityCandidate{nc, delta})
 			}
