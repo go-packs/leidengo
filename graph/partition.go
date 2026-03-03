@@ -80,6 +80,17 @@ func (p *Partition) WeightedEdgesToCommunity(nodeID, commID int) float64 {
 	return total
 }
 
+// NeighborCommunityWeights returns a map: communityID -> total edge weight from nodeID to that community.
+// This is more efficient than calling WeightedEdgesToCommunity multiple times.
+func (p *Partition) NeighborCommunityWeights(nodeID int) map[int]float64 {
+	weights := make(map[int]float64)
+	for neighbor, w := range p.g.Neighbors(nodeID) {
+		commID := p.NodeCommunity[neighbor]
+		weights[commID] += w
+	}
+	return weights
+}
+
 // MoveNode moves nodeID from its current community to destComm.
 // Caller is responsible for ensuring destComm exists.
 func (p *Partition) MoveNode(nodeID, destComm int) {

@@ -83,38 +83,36 @@ func bestCommunityForNode(
 	bestDelta = 0.0
 
 	// Collect distinct neighboring communities (excluding the node's own community)
-	neighborComms := make(map[int]bool)
-	for neighbor := range g.Neighbors(nodeID) {
-		if subsetM != nil && !subsetM[neighbor] {
+	// and filter by subset if necessary.
+	neighborWeights := p.NeighborCommunityWeights(nodeID)
+	kiInSrc := neighborWeights[currentComm]
+
+	for commID, kiInDest := range neighborWeights {
+		if commID == currentComm {
 			continue
 		}
-		nc := p.CommunityOf(neighbor)
-		if nc != currentComm {
-			neighborComms[nc] = true
+		
+		// If subsetM is provided, we only consider communities that contain at least one node from the subset.
+		if subsetM != nil {
+			inSubset := false
+			for neighbor := range g.Neighbors(nodeID) {
+				if p.NodeCommunity[neighbor] == commID && subsetM[neighbor] {
+					inSubset = true
+					break
+				}
+			}
+			if !inSubset {
+				continue
+			}
 		}
-	}
 
-	for commID := range neighborComms {
-		delta := qf.DeltaQuality(g, p, nodeID, commID)
+		delta := qf.DeltaQuality(g, p, nodeID, currentComm, commID, kiInSrc, kiInDest)
 		if delta > bestDelta {
 			bestDelta = delta
 			bestComm = commID
 		}
 	}
 	return bestComm, bestDelta
-}
-
-// isInSubset returns true if nodeID is in the subset (or subset is nil = all nodes).
-func isInSubset(nodeID int, subset []int) bool {
-	if subset == nil {
-		return true
-	}
-	for _, n := range subset {
-		if n == nodeID {
-			return true
-		}
-	}
-	return false
 }
 
 // subsetMap builds a fast O(1) lookup from a subset slice.
