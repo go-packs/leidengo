@@ -10,7 +10,7 @@ import (
 )
 
 func main() {
-	fmt.Println("=== Leiden Algorithm — leidengo ===")
+	fmt.Println("=== Leiden Algorithm:- leidengo ===")
 	fmt.Println()
 
 	fmt.Println("--- Example 1: Simple ring graph ---")
