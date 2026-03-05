@@ -1,0 +1,368 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Leiden Algorithm Visualizer</title>
+    <script src="https://d3js.org/d3.v7.min.js"></script>
+    <style>
+        :root {
+            --bg-color: #0f172a;
+            --sidebar-bg: #1e293b;
+            --text-color: #f1f5f9;
+            --accent-color: #38bdf8;
+            --border-color: #334155;
+        }
+
+        body, html {
+            margin: 0;
+            padding: 0;
+            width: 100%;
+            height: 100%;
+            overflow: hidden;
+            background-color: var(--bg-color);
+            color: var(--text-color);
+            font-family: 'Inter', -apple-system, BlinkMacSystemFont, "Segoe UI", Roboto, Helvetica, Arial, sans-serif;
+        }
+
+        #app {
+            display: flex;
+            width: 100vw;
+            height: 100vh;
+        }
+
+        #sidebar {
+            width: 320px;
+            background-color: var(--sidebar-bg);
+            border-right: 1px solid var(--border-color);
+            padding: 24px;
+            display: flex;
+            flex-direction: column;
+            gap: 20px;
+            z-index: 10;
+            box-shadow: 4px 0 15px rgba(0,0,0,0.3);
+            overflow-y: auto;
+        }
+
+        h1 {
+            font-size: 1.5rem;
+            margin: 0;
+            color: var(--accent-color);
+            font-weight: 700;
+            letter-spacing: -0.025em;
+        }
+
+        .control-group {
+            display: flex;
+            flex-direction: column;
+            gap: 8px;
+        }
+
+        label {
+            font-size: 0.875rem;
+            font-weight: 500;
+            color: #94a3b8;
+        }
+
+        select, input[type="range"], textarea {
+            width: 100%;
+            padding: 8px;
+            background-color: #0f172a;
+            border: 1px solid var(--border-color);
+            border-radius: 6px;
+            color: white;
+            font-size: 0.875rem;
+            box-sizing: border-box;
+        }
+
+        textarea {
+            height: 120px;
+            font-family: monospace;
+            resize: vertical;
+        }
+
+        .res-value {
+            display: flex;
+            justify-content: space-between;
+            align-items: center;
+        }
+
+        #viz-container {
+            flex-grow: 1;
+            position: relative;
+        }
+
+        svg {
+            width: 100%;
+            height: 100%;
+        }
+
+        .node {
+            stroke: #fff;
+            stroke-width: 1.5px;
+            cursor: pointer;
+            transition: r 0.2s;
+        }
+
+        .node:hover {
+            r: 10px;
+        }
+
+        .link {
+            stroke: #94a3b8;
+            stroke-opacity: 0.3;
+        }
+
+        .stats {
+            padding: 16px;
+            background-color: #0f172a;
+            border-radius: 8px;
+            font-size: 0.875rem;
+            border: 1px solid var(--border-color);
+        }
+
+        .stat-item {
+            display: flex;
+            justify-content: space-between;
+            margin-bottom: 4px;
+        }
+
+        .stat-value {
+            color: var(--accent-color);
+            font-weight: 600;
+        }
+
+        #loading {
+            position: absolute;
+            top: 20px;
+            right: 20px;
+            background: rgba(0,0,0,0.5);
+            padding: 8px 16px;
+            border-radius: 20px;
+            display: none;
+            z-index: 20;
+        }
+
+        button {
+            background-color: var(--accent-color);
+            color: #0f172a;
+            border: none;
+            padding: 10px;
+            border-radius: 6px;
+            font-weight: 600;
+            cursor: pointer;
+            transition: opacity 0.2s;
+        }
+
+        button:hover {
+            opacity: 0.9;
+        }
+    </style>
+</head>
+<body>
+    <div id="app">
+        <aside id="sidebar">
+            <h1>Leiden Viz</h1>
+            
+            <div class="control-group">
+                <label for="graph-type">Network Structure</label>
+                <select id="graph-type">
+                    <option value="cliques">Two Cliques (Bridge)</option>
+                    <option value="clusters">Random Clusters</option>
+                    <option value="ring">Ring Network</option>
+                    <option value="custom">Custom Edge List</option>
+                </select>
+            </div>
+
+            <div id="custom-input-group" class="control-group" style="display: none;">
+                <label for="edge-list">Edge List (src tgt [weight])</label>
+                <textarea id="edge-list" placeholder="0 1 1.0&#10;1 2 0.5&#10;2 0 1.0">0 1 1.0
+1 2 1.0
+2 3 1.0
+3 0 1.0
+4 5 1.0
+5 6 1.0
+6 4 1.0
+3 4 0.1</textarea>
+                <button id="apply-custom">Update Graph</button>
+            </div>
+
+            <div class="control-group">
+                <label for="quality-func">Quality Function</label>
+                <select id="quality-func">
+                    <option value="modularity">Modularity</option>
+                    <option value="cpm">Constant Potts Model (CPM)</option>
+                </select>
+            </div>
+
+            <div class="control-group">
+                <div class="res-value">
+                    <label for="resolution">Resolution (γ)</label>
+                    <span id="res-display" style="font-family: monospace; color: var(--accent-color)">1.000</span>
+                </div>
+                <input type="range" id="resolution" min="0" max="5" step="0.01" value="1.0">
+            </div>
+
+            <div class="stats">
+                <div class="stat-item">
+                    <span>Nodes:</span>
+                    <span id="node-count" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Edges:</span>
+                    <span id="edge-count" class="stat-value">0</span>
+                </div>
+                <div class="stat-item">
+                    <span>Communities:</span>
+                    <span id="comm-count" class="stat-value">0</span>
+                </div>
+            </div>
+
+            <p style="font-size: 0.75rem; color: #64748b; line-height: 1.4;">
+                Adjust resolution to see community splitting/merging.
+            </p>
+        </aside>
+
+        <main id="viz-container">
+            <div id="loading">Running Leiden...</div>
+            <svg id="canvas"></svg>
+        </main>
+    </div>
+
+    <script>
+        const svg = d3.select("#canvas");
+        const container = d3.select("#viz-container");
+        let width = container.node().clientWidth;
+        let height = container.node().clientHeight;
+
+        const colorScale = d3.scaleOrdinal(d3.schemeCategory10);
+
+        let simulation = d3.forceSimulation()
+            .force("link", d3.forceLink().id(d => d.id).distance(50))
+            .force("charge", d3.forceManyBody().strength(-200))
+            .force("center", d3.forceCenter(width / 2, height / 2))
+            .force("x", d3.forceX(width / 2).strength(0.1))
+            .force("y", d3.forceY(height / 2).strength(0.1));
+
+        function update() {
+            const graphType = document.getElementById("graph-type").value;
+            const qf = document.getElementById("quality-func").value;
+            const res = parseFloat(document.getElementById("resolution").value);
+            
+            document.getElementById("res-display").innerText = res.toFixed(3);
+            document.getElementById("loading").style.display = "block";
+
+            const customGroup = document.getElementById("custom-input-group");
+            if (graphType === "custom") {
+                customGroup.style.display = "flex";
+                const edges = document.getElementById("edge-list").value;
+                
+                fetch('/api/custom', {
+                    method: 'POST',
+                    headers: { 'Content-Type': 'application/json' },
+                    body: JSON.stringify({ edges, qf, res })
+                })
+                .then(r => r.json())
+                .then(data => {
+                    document.getElementById("loading").style.display = "none";
+                    render(data);
+                });
+            } else {
+                customGroup.style.display = "none";
+                fetch(`/api/graph?type=${graphType}&qf=${qf}&res=${res}`)
+                    .then(r => r.json())
+                    .then(data => {
+                        document.getElementById("loading").style.display = "none";
+                        render(data);
+                    });
+            }
+        }
+
+        function render(data) {
+            svg.selectAll("*").remove();
+            
+            const g = svg.append("g");
+
+            svg.call(d3.zoom().on("zoom", (event) => {
+                g.attr("transform", event.transform);
+            }));
+
+            const link = g.append("g")
+                .attr("class", "links")
+                .selectAll("line")
+                .data(data.links)
+                .enter().append("line")
+                .attr("class", "link")
+                .attr("stroke-width", d => Math.max(1, Math.sqrt(d.weight) * 2));
+
+            const node = g.append("g")
+                .attr("class", "nodes")
+                .selectAll("circle")
+                .data(data.nodes)
+                .enter().append("circle")
+                .attr("class", "node")
+                .attr("r", 8)
+                .attr("fill", d => colorScale(d.community))
+                .call(d3.drag()
+                    .on("start", dragstarted)
+                    .on("drag", dragged)
+                    .on("end", dragended));
+
+            node.append("title")
+                .text(d => `Node ${d.id}\nCommunity ${d.community}`);
+
+            simulation.nodes(data.nodes);
+            simulation.force("link").links(data.links);
+            simulation.alpha(1).restart();
+
+            simulation.on("tick", () => {
+                link
+                    .attr("x1", d => d.source.x)
+                    .attr("y1", d => d.source.y)
+                    .attr("x2", d => d.target.x)
+                    .attr("y2", d => d.target.y);
+
+                node
+                    .attr("cx", d => d.x)
+                    .attr("cy", d => d.y);
+            });
+
+            document.getElementById("node-count").innerText = data.nodes.length;
+            document.getElementById("edge-count").innerText = data.links.length;
+            const comms = new Set(data.nodes.map(n => n.community));
+            document.getElementById("comm-count").innerText = comms.size;
+        }
+
+        function dragstarted(event) {
+            if (!event.active) simulation.alphaTarget(0.3).restart();
+            event.subject.fx = event.subject.x;
+            event.subject.fy = event.subject.y;
+        }
+
+        function dragged(event) {
+            event.subject.fx = event.x;
+            event.subject.fy = event.y;
+        }
+
+        function dragended(event) {
+            if (!event.active) simulation.alphaTarget(0);
+            event.subject.fx = null;
+            event.subject.fy = null;
+        }
+
+        window.addEventListener("resize", () => {
+            width = container.node().clientWidth;
+            height = container.node().clientHeight;
+            simulation.force("center", d3.forceCenter(width / 2, height / 2));
+            simulation.alpha(0.3).restart();
+        });
+
+        document.getElementById("graph-type").onchange = update;
+        document.getElementById("quality-func").onchange = update;
+        document.getElementById("resolution").oninput = update;
+        document.getElementById("apply-custom").onclick = update;
+        
+        update();
+    </script>
+</body>
+</html>
