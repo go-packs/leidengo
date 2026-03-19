@@ -2,13 +2,26 @@ name: Deploy to GitHub Pages
 
 on:
   push:
-    branches: [ main ]
+    branches: [ main ] # Trigger on every push to main
+  workflow_dispatch:    # Allows you to trigger it manually from the UI
+
+# Gives the workflow permission to deploy to GitHub Pages
+permissions:
+  contents: read
+  pages: write
+  id-token: write
+
+# Ensure only one deployment happens at a time
+concurrency:
+  group: "pages"
+  cancel-in-progress: false
 
 jobs:
-  build-and-deploy:
+  build:
     runs-on: ubuntu-latest
     steps:
-      - uses: actions/checkout@v4
+      - name: Checkout
+        uses: actions/checkout@v4
 
       - name: Set up Go
         uses: actions/setup-go@v5
@@ -18,11 +31,20 @@ jobs:
       - name: Build WebAssembly
         run: |
           GOOS=js GOARCH=wasm go build -o viz/static/main.wasm viz/wasm/main.go
-          # Find and copy wasm_exec.js dynamically
           cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" viz/static/ || cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" viz/static/
 
-      - name: Deploy to GitHub Pages
-        uses: JamesIves/github-pages-deploy-action@v4
+      - name: Upload artifact
+        uses: actions/upload-pages-artifact@v3
         with:
-          folder: viz/static
-          branch: gh-pages
+          path: './viz/static'
+
+  deploy:
+    environment:
+      name: github-pages
+      url: ${{ steps.deployment.outputs.page_url }}
+    runs-on: ubuntu-latest
+    needs: build
+    steps:
+      - name: Deploy to GitHub Pages
+        id: deployment
+        uses: actions/deploy-pages@v4
