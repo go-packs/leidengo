@@ -1,0 +1,28 @@
+name: Deploy to GitHub Pages
+
+on:
+  push:
+    branches: [ main ]
+
+jobs:
+  build-and-deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Set up Go
+        uses: actions/setup-go@v5
+        with:
+          go-version: '1.21'
+
+      - name: Build WebAssembly
+        run: |
+          GOOS=js GOARCH=wasm go build -o viz/static/main.wasm viz/wasm/main.go
+          # Find and copy wasm_exec.js dynamically
+          cp "$(go env GOROOT)/lib/wasm/wasm_exec.js" viz/static/ || cp "$(go env GOROOT)/misc/wasm/wasm_exec.js" viz/static/
+
+      - name: Deploy to GitHub Pages
+        uses: JamesIves/github-pages-deploy-action@v4
+        with:
+          folder: viz/static
+          branch: gh-pages

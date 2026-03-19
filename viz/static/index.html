@@ -5,6 +5,16 @@
     <meta name="viewport" content="width=device-width, initial-scale=1.0">
     <title>Leiden Algorithm Visualizer</title>
     <script src="https://d3js.org/d3.v7.min.js"></script>
+    <script src="wasm_exec.js"></script>
+    <script>
+        const go = new Go();
+        let wasmModule;
+        WebAssembly.instantiateStreaming(fetch("main.wasm"), go.importObject).then((result) => {
+            go.run(result.instance);
+            console.log("Wasm initialized");
+            update(); // Initial run after Wasm is ready
+        });
+    </script>
     <style>
         :root {
             --bg-color: #0f172a;
@@ -244,7 +254,45 @@
             .force("x", d3.forceX(width / 2).strength(0.1))
             .force("y", d3.forceY(height / 2).strength(0.1));
 
+        function generateTwoCliques() {
+            let edges = [];
+            for (let i = 0; i < 10; i++) {
+                for (let j = i + 1; j < 10; j++) edges.push(`${i} ${j} 1.0`);
+            }
+            for (let i = 10; i < 20; i++) {
+                for (let j = i + 1; j < 20; j++) edges.push(`${i} ${j} 1.0`);
+            }
+            edges.push("9 10 0.5");
+            return edges.join("\n");
+        }
+
+        function generateRing(n) {
+            let edges = [];
+            for (let i = 0; i < n; i++) edges.push(`${i} ${(i + 1) % n} 1.0`);
+            return edges.join("\n");
+        }
+
+        function generateClusters(k, nPerCluster) {
+            let edges = [];
+            for (let c = 0; c < k; c++) {
+                let start = c * nPerCluster;
+                for (let i = 0; i < nPerCluster; i++) {
+                    for (let j = i + 1; j < nPerCluster; j++) {
+                        if (Math.random() < 0.7) edges.push(`${start + i} ${start + j} 1.0`);
+                    }
+                }
+            }
+            for (let i = 0; i < k * nPerCluster; i++) {
+                for (let j = i + 1; j < k * nPerCluster; j++) {
+                    if (Math.random() < 0.02) edges.push(`${i} ${j} 0.1`);
+                }
+            }
+            return edges.join("\n");
+        }
+
         function update() {
+            if (typeof runLeidenWasm !== "function") return; // Wasm not yet ready
+
             const graphType = document.getElementById("graph-type").value;
             const qf = document.getElementById("quality-func").value;
             const res = parseFloat(document.getElementById("resolution").value);
@@ -252,30 +300,32 @@
             document.getElementById("res-display").innerText = res.toFixed(3);
             document.getElementById("loading").style.display = "block";
 
+            let edgeListStr = "";
             const customGroup = document.getElementById("custom-input-group");
+            
             if (graphType === "custom") {
                 customGroup.style.display = "flex";
-                const edges = document.getElementById("edge-list").value;
-                
-                fetch('/api/custom', {
-                    method: 'POST',
-                    headers: { 'Content-Type': 'application/json' },
-                    body: JSON.stringify({ edges, qf, res })
-                })
-                .then(r => r.json())
-                .then(data => {
-                    document.getElementById("loading").style.display = "none";
-                    render(data);
-                });
+                edgeListStr = document.getElementById("edge-list").value;
             } else {
                 customGroup.style.display = "none";
-                fetch(`/api/graph?type=${graphType}&qf=${qf}&res=${res}`)
-                    .then(r => r.json())
-                    .then(data => {
-                        document.getElementById("loading").style.display = "none";
-                        render(data);
-                    });
+                if (graphType === "cliques") edgeListStr = generateTwoCliques();
+                else if (graphType === "ring") edgeListStr = generateRing(20);
+                else if (graphType === "clusters") edgeListStr = generateClusters(3, 10);
             }
+
+            // Small delay to allow UI to show loading
+            setTimeout(() => {
+                const resultJson = runLeidenWasm(edgeListStr, qf, res);
+                document.getElementById("loading").style.display = "none";
+
+                if (resultJson.startsWith("Error")) {
+                    console.error(resultJson);
+                    return;
+                }
+
+                const data = JSON.parse(resultJson);
+                render(data);
+            }, 10);
         }
 
         function render(data) {
