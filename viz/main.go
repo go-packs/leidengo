@@ -163,6 +163,8 @@ func handleGraph(w http.ResponseWriter, r *http.Request) {
 
 	var g *graph.Graph
 	switch graphType {
+	case "social":
+		g = generateSocialCircles()
 	case "cliques":
 		g = generateTwoCliques()
 	case "ring":
@@ -170,7 +172,7 @@ func handleGraph(w http.ResponseWriter, r *http.Request) {
 	case "clusters":
 		g = generateClusters(3, 10)
 	default:
-		g = generateTwoCliques()
+		g = generateSocialCircles()
 	}
 
 	var qf quality.QualityFunction
@@ -263,5 +265,18 @@ func generateClusters(k, nPerCluster int) *graph.Graph {
 			}
 		}
 	}
+	return g
+}
+
+func generateSocialCircles() *graph.Graph {
+	g := graph.New(7)
+	g.AddEdge(0, 1, 1.0)
+	g.AddEdge(1, 2, 1.0)
+	g.AddEdge(2, 0, 1.0)
+	g.AddEdge(3, 4, 1.0)
+	g.AddEdge(4, 5, 1.0)
+	g.AddEdge(5, 3, 1.0)
+	g.AddEdge(2, 6, 0.2)
+	g.AddEdge(3, 6, 0.9)
 	return g
 }

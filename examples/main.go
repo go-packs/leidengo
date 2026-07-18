@@ -3,6 +3,8 @@ package main
 
 import (
 	"fmt"
+	"strconv"
+	"strings"
 
 	"github.com/go-packs/leidengo/graph"
 	"github.com/go-packs/leidengo/leiden"
@@ -27,6 +29,10 @@ func main() {
 	fmt.Println()
 	fmt.Println("--- Example 4: CPM quality function ---")
 	runCPM()
+
+	fmt.Println()
+	fmt.Println("--- Example 5: Social Interest Circles ---")
+	runSocialCircles()
 }
 
 // runRingGraph detects communities in a ring of 8 nodes.
@@ -172,4 +178,80 @@ func karateClubGraph() *graph.Graph {
 		_ = g.AddEdge(e[0], e[1], 1.0)
 	}
 	return g
+}
+
+// runSocialCircles groups individuals in a social network into communities of interest interactively.
+func runSocialCircles() {
+	users := []string{
+		"Alice",   // 0 (Tech enthusiast)
+		"Bob",     // 1 (Tech enthusiast)
+		"Charlie", // 2 (Tech enthusiast)
+		"Dave",    // 3 (Pro Gamer)
+		"Eve",     // 4 (Pro Gamer)
+		"Frank",   // 5 (Pro Gamer)
+		"Grace",   // 6 (Mutual friend / Bridge)
+	}
+
+	g := graph.New(len(users))
+
+	// Tech Circle (Alice, Bob, Charlie)
+	_ = g.AddEdge(0, 1, 1.0)
+	_ = g.AddEdge(1, 2, 1.0)
+	_ = g.AddEdge(2, 0, 1.0)
+
+	// Gaming Circle (Dave, Eve, Frank)
+	_ = g.AddEdge(3, 4, 1.0)
+	_ = g.AddEdge(4, 5, 1.0)
+	_ = g.AddEdge(5, 3, 1.0)
+
+	// Grace is connected to both circles but much closer to the gamers
+	_ = g.AddEdge(2, 6, 0.2) // Charlie <-> Grace (weak)
+	_ = g.AddEdge(3, 6, 0.9) // Dave <-> Grace (strong)
+
+	fmt.Println("  Interactive Social Circle Finder:")
+	fmt.Println("  Type a resolution parameter (e.g. 0.05 to 5.0) to see how communities split/merge.")
+	fmt.Println("  - Low resolution (e.g., 0.1) merges groups.")
+	fmt.Println("  - High resolution (e.g., 2.0) splits groups into singletons.")
+	fmt.Println("  Type 'q' or 'exit' to quit.")
+	fmt.Println()
+
+	var res float64 = 1.0
+	for {
+		fmt.Printf("  Enter resolution parameter (gamma) [current = %.2f]: ", res)
+		var input string
+		_, err := fmt.Scanln(&input)
+		if err != nil {
+			break
+		}
+		input = strings.TrimSpace(input)
+		if input == "q" || input == "exit" {
+			break
+		}
+		parsed, err := strconv.ParseFloat(input, 64)
+		if err != nil || parsed < 0 {
+			fmt.Println("  ⚠ Invalid input. Please enter a positive number.")
+			continue
+		}
+		res = parsed
+
+		qf := quality.NewModularity(res)
+		result := leiden.Run(g, leiden.Options{
+			QualityFunc:   qf,
+			NumIterations: -1,
+			RandomSeed:    42,
+		})
+
+		// Group and print members by their detected circle
+		communities := make(map[int][]string)
+		for userID, commID := range result.FlatCommunities {
+			communities[commID] = append(communities[commID], users[userID])
+		}
+
+		circleNum := 1
+		for _, members := range communities {
+			fmt.Printf("    Circle %d: %v\n", circleNum, members)
+			circleNum++
+		}
+		fmt.Println()
+	}
 }
