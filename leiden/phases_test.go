@@ -129,3 +129,83 @@ func TestAggregateGraph_SelfLoops(t *testing.T) {
 		t.Errorf("expected 6.0 combined self-loop weight, got %f", res3.aggregated.WeightBetween(0, 0))
 	}
 }
+
+func TestProbabilisticChoice(t *testing.T) {
+	rng := rand.New(rand.NewSource(42))
+
+	// Scenario 1: Empty candidates
+	if res := probabilisticChoice(nil, rng); res != -1 {
+		t.Errorf("expected -1 for nil candidates, got %d", res)
+	}
+	if res := probabilisticChoice([]communityCandidate{}, rng); res != -1 {
+		t.Errorf("expected -1 for empty candidates, got %d", res)
+	}
+
+	// Scenario 2: Single candidate
+	single := []communityCandidate{{commID: 5, delta: 0.5}}
+	if res := probabilisticChoice(single, rng); res != 5 {
+		t.Errorf("expected 5 for single candidate, got %d", res)
+	}
+
+	// Scenario 3: Multiple candidates
+	candidates := []communityCandidate{
+		{commID: 10, delta: 0.1},
+		{commID: 20, delta: 0.2},
+		{commID: 30, delta: 0.3},
+	}
+	// We run it many times and verify we only get expected IDs
+	for i := 0; i < 100; i++ {
+		res := probabilisticChoice(candidates, rng)
+		if res != 10 && res != 20 && res != 30 {
+			t.Errorf("unexpected community choice: %d", res)
+		}
+	}
+
+	// Scenario 4: All zero or very negative probabilities
+	candidatesZero := []communityCandidate{
+		{commID: 10, delta: -10000},
+		{commID: 20, delta: -10000},
+	}
+	res := probabilisticChoice(candidatesZero, rng)
+	if res != -1 && res != 10 && res != 20 {
+		t.Errorf("unexpected choice for underflowing candidates: %d", res)
+	}
+}
+
+func TestPartitionFromNodeCommunity(t *testing.T) {
+	g := graph.New(5)
+	nc := []int{2, 2, 7, 7, 2}
+	p := partitionFromNodeCommunity(g, nc)
+
+	if p.CommunityOf(0) != p.CommunityOf(1) {
+		t.Error("nodes 0 and 1 should be in the same community")
+	}
+	if p.CommunityOf(0) != p.CommunityOf(4) {
+		t.Error("nodes 0 and 4 should be in the same community")
+	}
+	if p.CommunityOf(2) != p.CommunityOf(3) {
+		t.Error("nodes 2 and 3 should be in the same community")
+	}
+	if p.CommunityOf(0) == p.CommunityOf(2) {
+		t.Error("different community IDs should result in distinct communities")
+	}
+}
+
+func TestSubsetMap(t *testing.T) {
+	if m := subsetMap(nil); m != nil {
+		t.Error("expected nil map for nil subset")
+	}
+
+	subset := []int{1, 3, 5}
+	m := subsetMap(subset)
+	if len(m) != 3 {
+		t.Errorf("expected map length 3, got %d", len(m))
+	}
+	if !m[1] || !m[3] || !m[5] {
+		t.Error("missing expected keys in subset map")
+	}
+	if m[2] {
+		t.Error("unexpected key in subset map")
+	}
+}
+
