@@ -38,7 +38,7 @@ func refinementPhase(
 		if len(nodesInComm) <= 1 {
 			continue
 		}
-		refineSubset(g, refined, coarsePartition, nodesInComm, qf, rng)
+		refineSubset(g, refined, nodesInComm, qf, rng)
 	}
 
 	return refined
@@ -54,7 +54,6 @@ func refinementPhase(
 func refineSubset(
 	g *graph.Graph,
 	refined *graph.Partition,
-	coarse *graph.Partition,
 	subset []int,
 	qf quality.QualityFunction,
 	rng *rand.Rand,
