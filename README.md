@@ -70,6 +70,8 @@ Open **`http://localhost:8080`** to:
 *   **Dynamic Input**: Paste your own edge list to visualize any network.
 *   Interactively adjust **Resolution (γ)** and switch between **Modularity** and **CPM**.
 
+![Leiden Visualizer Demo](viz/static/leiden_viz_demo.webp)
+
 ---
 
 ## Package Overview
